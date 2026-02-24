@@ -1,0 +1,37 @@
+{
+  "users": [
+    {"id": 1, "name": "Laurent Bayart"},
+    {"id": 2, "name": "Thomas"},
+    {"id": 3, "name": "Yoann"},
+    {"id": 4, "name": "Anthony"},
+    {"id": 5, "name": "Maxence"},
+    {"id": 6, "name": "Stephanie Alberola"},
+    {"id": 7, "name": "Yann Moret"},
+    {"id": 8, "name": "Assia Tria"},
+    {"id": 9, "name": "Cedric Testaniere"}
+  ],
+  "products": [
+    {"id": 1, "name": "Minecraft"},
+    {"id": 2, "name": "Dofus"}
+  ],
+  "follows": [
+    {"follower_id": 2, "followee_id": 1},
+    {"follower_id": 1, "followee_id": 2},
+    {"follower_id": 3, "followee_id": 2},
+    {"follower_id": 4, "followee_id": 2},
+    {"follower_id": 5, "followee_id": 2},
+    {"follower_id": 9, "followee_id": 6},
+    {"follower_id": 7, "followee_id": 6},
+    {"follower_id": 8, "followee_id": 6},
+    {"follower_id": 8, "followee_id": 3}
+  ],
+  "purchases": [
+    {"user_id": 2, "product_id": 1},
+    {"user_id": 3, "product_id": 1},
+    {"user_id": 4, "product_id": 1},
+    {"user_id": 5, "product_id": 1},
+    {"user_id": 7, "product_id": 1},
+    {"user_id": 8, "product_id": 1},
+    {"user_id": 9, "product_id": 1}
+  ]
+}
