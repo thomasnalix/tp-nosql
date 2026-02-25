@@ -30,23 +30,23 @@ class MariaDBAdapter(DatabaseAdapter):
         self.cursor.execute("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255))")
         self.cursor.execute("CREATE TABLE products (id INT PRIMARY KEY, name VARCHAR(255))")
         self.cursor.execute("""
-            CREATE TABLE follows (
-                follower_id INT,
-                followee_id INT,
-                PRIMARY KEY (follower_id, followee_id),
-                INDEX idx_followee (followee_id),
-                INDEX idx_follower (follower_id)
-            )
-        """)
+                            CREATE TABLE follows (
+                                                     follower_id INT,
+                                                     followee_id INT,
+                                                     PRIMARY KEY (follower_id, followee_id),
+                                                     INDEX idx_followee (followee_id),
+                                                     INDEX idx_follower (follower_id)
+                            )
+                            """)
         self.cursor.execute("""
-            CREATE TABLE purchases (
-                user_id INT,
-                product_id INT,
-                PRIMARY KEY (user_id, product_id),
-                INDEX idx_product (product_id),
-                INDEX idx_user (user_id)
-            )
-        """)
+                            CREATE TABLE purchases (
+                                                       user_id INT,
+                                                       product_id INT,
+                                                       PRIMARY KEY (user_id, product_id),
+                                                       INDEX idx_product (product_id),
+                                                       INDEX idx_user (user_id)
+                            )
+                            """)
 
         print("Chargement des utilisateurs...")
         users_data = [(u['id'], u['name']) for u in data['users']]
@@ -136,7 +136,7 @@ class MariaDBAdapter(DatabaseAdapter):
         else:
             query = f"""
             WITH RECURSIVE chain AS (
-                SELECT p1.user_id AS start_id, p1.user_id AS current_id, 0 AS lvl
+                SELECT p1.user_id AS current_id, 0 AS lvl
                 FROM purchases p1
                 WHERE p1.product_id = {product_id}
                   AND NOT EXISTS (
@@ -147,16 +147,21 @@ class MariaDBAdapter(DatabaseAdapter):
     
                 UNION ALL
     
-                SELECT c.start_id, f.follower_id, c.lvl + 1
+                SELECT f.follower_id, c.lvl + 1
                 FROM chain c
                 JOIN follows f ON f.followee_id = c.current_id
                 JOIN purchases p ON f.follower_id = p.user_id
                 WHERE c.lvl < {level}
                   AND p.product_id = {product_id}
+            ),
+            ShortestPaths AS (
+                SELECT current_id, MIN(lvl) as min_lvl
+                FROM chain
+                GROUP BY current_id
             )
-            SELECT COUNT(DISTINCT current_id) as viral_buyers
-            FROM chain
-            WHERE lvl > 0 AND lvl <= {level};
+            SELECT COUNT(current_id) as viral_buyers
+            FROM ShortestPaths
+            WHERE min_lvl > 0 AND min_lvl <= {level};
             """
         self.cursor.execute(query)
         return self.cursor.fetchall()
@@ -176,7 +181,7 @@ class MariaDBAdapter(DatabaseAdapter):
         else:
             query = f"""
             WITH RECURSIVE chain AS (
-                SELECT p1.user_id AS start_id, p1.user_id AS current_id, 0 AS lvl
+                SELECT p1.user_id AS current_id, 0 AS lvl
                 FROM purchases p1
                 WHERE p1.product_id = {product_id}
                   AND NOT EXISTS (
@@ -187,19 +192,25 @@ class MariaDBAdapter(DatabaseAdapter):
     
                 UNION ALL
     
-                SELECT c.start_id, f.follower_id, c.lvl + 1
+                SELECT f.follower_id, c.lvl + 1
                 FROM chain c
                 JOIN follows f ON f.followee_id = c.current_id
                 JOIN purchases p ON f.follower_id = p.user_id
                 WHERE c.lvl < {level}
                   AND p.product_id = {product_id}
+            ),
+            ShortestPaths AS (
+                SELECT current_id, MIN(lvl) as min_lvl
+                FROM chain
+                GROUP BY current_id
             )
-            SELECT COUNT(DISTINCT current_id) as viral_buyers
-            FROM chain
-            WHERE lvl = {level};
+            SELECT COUNT(current_id) as viral_buyers
+            FROM ShortestPaths
+            WHERE min_lvl = {level};
             """
         self.cursor.execute(query)
         return self.cursor.fetchall()
+
     def get_stats(self):
         try:
             self.cursor.execute("SELECT COUNT(*) as cnt FROM users")
@@ -217,4 +228,3 @@ class MariaDBAdapter(DatabaseAdapter):
     def close(self):
         self.cursor.close()
         self.conn.close()
-

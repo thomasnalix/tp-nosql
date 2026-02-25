@@ -5,7 +5,7 @@ from tqdm import tqdm
 NEO4J_URI = "bolt://localhost:7687"
 NEO4J_AUTH = ("neo4j", "password")
 
-BATCH_SIZE = 1000
+BATCH_SIZE = 10000
 
 
 class Neo4jAdapter(DatabaseAdapter):
@@ -87,54 +87,90 @@ class Neo4jAdapter(DatabaseAdapter):
     def query_3_viral_product_disk(self, product_id, level):
         if level == 0:
             query = """
-            MATCH (start_user:User)-[:BOUGHT]->(p:Product {id: $product_id})
-            WHERE NOT (start_user)-[:FOLLOWS]->(:User)-[:BOUGHT]->(p)
-            RETURN count(DISTINCT start_user) as viral_buyers
+            MATCH (u:User)-[:BOUGHT]->(p:Product {id: $product_id})
+            WHERE NOT (u)-[:FOLLOWS]->(:User)-[:BOUGHT]->(p)
+            RETURN count(DISTINCT u) as viral_buyers
             """
-        else:
-            query = f"""
-            MATCH (p:Product {{id: $product_id}})
-            
-            MATCH (start_user:User)-[:BOUGHT]->(p)
-            WHERE NOT (start_user)-[:FOLLOWS]->(:User)-[:BOUGHT]->(p)
-            
-            MATCH path = (buyer:User)-[:FOLLOWS*1..{level}]->(start_user)
-            WHERE buyer <> start_user
-              AND ALL(u IN nodes(path) WHERE (u)-[:BOUGHT]->(p))
-              
-            RETURN count(DISTINCT buyer) as viral_buyers
-            """
+            with self.driver.session() as session:
+                result = session.run(query, product_id=product_id).data()
+                return result if result else [{'viral_buyers': 0}]
+
+        organic_query = """
+        MATCH (u:User)-[:BOUGHT]->(p:Product {id: $product_id})
+        WHERE NOT (u)-[:FOLLOWS]->(:User)-[:BOUGHT]->(p)
+        RETURN collect(DISTINCT u.id) as ids
+        """
+        hop_query = """
+        MATCH (follower:User)-[:FOLLOWS]->(u:User)
+        WHERE u.id IN $current_ids
+          AND (follower)-[:BOUGHT]->(:Product {id: $product_id})
+          AND NOT follower.id IN $visited_ids
+        RETURN collect(DISTINCT follower.id) as ids
+        """
         with self.driver.session() as session:
-            result = session.run(query, product_id=product_id).data()
-            if not result:
-                return [{'viral_buyers': 0}]
-            return result
+            organic_ids = session.run(organic_query, product_id=product_id).single()['ids']
+            visited = set(organic_ids)
+            current = set(organic_ids)
+            disk_buyers = set()
+
+            for _ in range(level):
+                if not current:
+                    break
+                new_ids = session.run(
+                    hop_query,
+                    current_ids=list(current),
+                    visited_ids=list(visited),
+                    product_id=product_id
+                ).single()['ids']
+                new_set = set(new_ids) - visited
+                visited |= new_set
+                current = new_set
+                disk_buyers |= new_set
+
+            return [{'viral_buyers': len(disk_buyers)}]
 
     def query_4_viral_product_circle(self, product_id, level):
         if level == 0:
             query = """
-            MATCH (buyer:User)-[:BOUGHT]->(p:Product {id: $product_id})
-            WHERE NOT (buyer)-[:FOLLOWS]->(:User)-[:BOUGHT]->(p)
-            RETURN count(DISTINCT buyer) as viral_buyers
+            MATCH (u:User)-[:BOUGHT]->(p:Product {id: $product_id})
+            WHERE NOT (u)-[:FOLLOWS]->(:User)-[:BOUGHT]->(p)
+            RETURN count(DISTINCT u) as viral_buyers
             """
-        else:
-            query = f"""
-            MATCH (p:Product {{id: $product_id}})
-            
-            MATCH (start_user:User)-[:BOUGHT]->(p)
-            WHERE NOT (start_user)-[:FOLLOWS]->(:User)-[:BOUGHT]->(p)
-            
-            MATCH path = (buyer:User)-[:FOLLOWS*{level}..{level}]->(start_user)
-            WHERE buyer <> start_user
-              AND ALL(u IN nodes(path) WHERE (u)-[:BOUGHT]->(p))
-              
-            RETURN count(DISTINCT buyer) as viral_buyers
-            """
+            with self.driver.session() as session:
+                result = session.run(query, product_id=product_id).data()
+                return result if result else [{'viral_buyers': 0}]
+
+        organic_query = """
+        MATCH (u:User)-[:BOUGHT]->(p:Product {id: $product_id})
+        WHERE NOT (u)-[:FOLLOWS]->(:User)-[:BOUGHT]->(p)
+        RETURN collect(DISTINCT u.id) as ids
+        """
+        hop_query = """
+        MATCH (follower:User)-[:FOLLOWS]->(u:User)
+        WHERE u.id IN $current_ids
+          AND (follower)-[:BOUGHT]->(:Product {id: $product_id})
+          AND NOT follower.id IN $visited_ids
+        RETURN collect(DISTINCT follower.id) as ids
+        """
         with self.driver.session() as session:
-            result = session.run(query, product_id=product_id).data()
-            if not result:
-                return [{'viral_buyers': 0}]
-            return result
+            organic_ids = session.run(organic_query, product_id=product_id).single()['ids']
+            visited = set(organic_ids)
+            current = set(organic_ids)
+
+            for _ in range(level):
+                if not current:
+                    return [{'viral_buyers': 0}]
+                new_ids = session.run(
+                    hop_query,
+                    current_ids=list(current),
+                    visited_ids=list(visited),
+                    product_id=product_id
+                ).single()['ids']
+                new_set = set(new_ids) - visited
+                visited |= new_set
+                current = new_set
+
+            return [{'viral_buyers': len(current)}]
 
 
     def get_stats(self):

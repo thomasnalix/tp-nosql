@@ -28,7 +28,7 @@ def generate_synthetic_data(num_users=1_000_000, num_products=10_000, max_follow
     print("  Génération des achats...")
     purchases = []
     for user_id in range(1, num_users + 1):
-        num_purchases = random.randint(0, 5)
+        num_purchases = random.randint(0, min(5, num_products))
         bought_products = random.sample(range(1, num_products + 1), num_purchases)
         for product_id in bought_products:
             purchases.append({'user_id': user_id, 'product_id': product_id})
